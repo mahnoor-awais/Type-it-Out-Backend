@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Type_It_Out_Backend.Data;
 using Type_It_Out_Backend.DTO.Articles;
+using Type_It_Out_Backend.DTOs.Articles;
 using Type_It_Out_Backend.DTOs.Comments;
 using Type_It_Out_Backend.Models;
 
@@ -341,7 +342,7 @@ namespace Type_It_Out_Backend.Controllers
             var articleExists = await _context.Articles
                 .AnyAsync(a => a.Id == articleId);
 
-            if(!articleExists)
+            if (!articleExists)
             {
                 return NotFound(new
                 {
@@ -371,6 +372,86 @@ namespace Type_It_Out_Backend.Controllers
                 message = "Comment deleted successfully."
             });
         }
+
+
+        [Authorize]
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> UpdateArticle(int id, UpdateArticleDto dto)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                              ?? User.FindFirst("sub")?.Value;
+
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            var article = await _context.Articles
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (article == null)
+                return NotFound(new { message = "Article not found." });
+
+            if (article.AuthorId != userId)
+                return Forbid();
+
+            if (string.IsNullOrWhiteSpace(dto.Title) ||
+                string.IsNullOrWhiteSpace(dto.Content))
+            {
+                return BadRequest(new
+                {
+                    message = "Title and content cannot be empty."
+                });
+            }
+
+            article.Title = dto.Title.Trim();
+            article.Content = dto.Content.Trim();
+            article.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Article updated successfully.",
+                article.Id,
+                article.Title,
+                article.Content,
+                article.UpdatedAt
+            });
+        }
+
+
+        [Authorize]
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> DeleteArticle(int id)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                              ?? User.FindFirst("sub")?.Value;
+
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            var article = await _context.Articles.Include(a => a.Users).FirstOrDefaultAsync(a => a.Id == id);
+
+            if (article == null)
+                return NotFound(new { message = "Article not found." });
+
+            if (article.AuthorId != userId)
+                return Forbid();
+
+            article.Users.Clear();
+            var comments = await _context.Comments
+                .Where(c => c.ArticleId == id)
+                .ToListAsync();
+            _context.Comments.RemoveRange(comments);
+            _context.Articles.Remove(article);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Article deleted successfully."
+            });
+        }
+
 
     }
 }
