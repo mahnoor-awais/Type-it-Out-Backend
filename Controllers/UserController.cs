@@ -14,6 +14,37 @@ namespace Type_It_Out_Backend.Controllers
 
         private readonly AppDbContext _context = context;
 
+
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetUser(int id)
+        {
+            var user = await _context.Users
+                .Where(u => u.Id == id)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.Username,
+                    u.Bio,
+                    u.ProfileImageUrl,
+                    u.CreatedAt,
+
+                    ArticlesCount = u.Articles.Count(),
+
+                    FollowersCount = _context.Follows
+                        .Count(f => f.FollowingId == u.Id),
+
+                    FollowingCount = _context.Follows
+                        .Count(f => f.FollowerId == u.Id)
+                })
+                .FirstOrDefaultAsync();
+
+            if (user == null)
+                return NotFound(new { message = "User not found." });
+
+            return Ok(user);
+        }
+
+
         [Authorize]
         [HttpGet("{id}/articles")]
         public async Task<IActionResult> UserArticles(int id)
