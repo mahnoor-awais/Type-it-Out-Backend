@@ -42,6 +42,42 @@ namespace Type_It_Out_Backend.Controllers
             return Ok(articles);
         }
 
+        [Authorize]
+        [HttpGet("followingArticles")]
+        public async Task<IActionResult> GetFollowingArticles()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                              ?? User.FindFirst("sub")?.Value;
+
+            if (!int.TryParse(userIdClaim, out var userId))
+                return Unauthorized();
+
+            var articles = await _context.Articles
+                .AsNoTracking()
+                .Where(a => _context.Follows.Any(f =>
+                    f.FollowerId == userId && f.FollowingId == a.AuthorId))
+                .OrderByDescending(a => a.CreatedAt)
+                .Select(a => new ArticlesResponseDto
+                {
+                    Id = a.Id,
+                    Title = a.Title,
+                    Content = a.Content,
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt,
+                    LikesCount = a.Users.Count,
+                    CommentsCount = a.Comments.Count,
+                    Author = new AuthorDto
+                    {
+                        Id = a.Author.Id,
+                        Username = a.Author.Username,
+                        ProfileImageUrl = a.Author.ProfileImageUrl
+                    }
+                })
+                .ToListAsync();
+
+            return Ok(articles);
+        }
+
         [HttpGet("articleDetail")]
         public async Task<IActionResult> GetArticleById([FromQuery] int id)
         {
